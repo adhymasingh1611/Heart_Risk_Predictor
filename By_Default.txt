@@ -1,0 +1,195 @@
+Train_Model
+
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import joblib
+
+# Load dataset
+df = pd.read_csv("heart.csv")
+
+# Convert all categorical (object) columns automatically
+df = pd.get_dummies(df, drop_first=True)
+
+# Split features and target
+X = df.drop("target", axis=1)
+y = df["target"]
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# Scale data
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Train model
+model = LogisticRegression(max_iter=2000)
+model.fit(X_train, y_train)
+
+# Accuracy
+y_pred = model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+print("Model Accuracy:", accuracy)
+
+# Save model & scaler
+joblib.dump(model, "model.pkl")
+joblib.dump(scaler, "scaler.pkl")
+joblib.dump(X.columns.tolist(), "feature_columns.pkl")
+
+
+
+
+App_Section_Coding
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import joblib
+import base64
+def add_bg_video(video_file):
+    with open(video_file, "rb") as f:
+        data = f.read()
+    video_base64 = base64.b64encode(data).decode()
+
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background: transparent;
+        }}
+
+        #bgvideo {{
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            z-index: -1;
+        }}
+        </style>
+
+        <video autoplay muted loop id="bgvideo">
+            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+        </video>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Load saved files
+model = joblib.load("model.pkl")
+scaler = joblib.load("scaler.pkl")
+feature_columns = joblib.load("feature_columns.pkl")
+
+st.set_page_config(page_title="AI Heart Risk Predictor", layout="wide")
+add_bg_video("background.mp4")
+# -------- VIDEO BACKGROUND --------
+
+video_file = open("background.mp4", "rb")
+video_bytes = video_file.read()
+
+st.markdown(
+    f"""
+    <style>
+    .stApp {{
+        background: transparent;
+    }}
+
+    video {{
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        min-width: 100%;
+        min-height: 100%;
+        z-index: -1;
+    }}
+    </style>
+
+    <video autoplay muted loop>
+        <source src="data:video/mp4;base64,{video_bytes.hex()}" type="video/mp4">
+    </video>
+    """,
+    unsafe_allow_html=True
+)
+
+st.title("🏥 AI Heart Disease Risk Prediction System")
+st.write("Enter patient details below:")
+
+# ----------- USER INPUTS ------------
+
+age = st.slider("age", 20, 100, 40)
+sex = st.selectbox("sex", ["Male", "Female"])
+chest_pain_type = st.selectbox("chest pain type", 
+                               ["Typical angina", "Atypical angina", 
+                                "Non-anginal Pain", "Asymptomatic"])
+resting_blood_pressure = st.slider("Resting Blood Pressure", 80, 200, 120)
+cholestoral = st.slider("Cholesterol", 100, 400, 200)
+fasting_blood_sugar = st.selectbox("fasting blood sugar", ["Lower than 120 mg/ml", "Greater than 120 mg/ml"])
+rest_ecg = st.selectbox("Rest ECG", ["ST-T abnormality", "Normal", "Left ventricular hypertrophy"])
+Max_heart_rate = st.slider("Max Heart Rate", 70, 210, 150)
+exercise_induced_angina = st.selectbox("Exercise Induced Angina", ["No", "Yes"])
+oldpeak = st.slider("Oldpeak (ST depression)", 0.0, 6.0, 1.0)
+slope = st.selectbox("Slope", ["Downsloping", "Upsloping", "Flat"])
+vessels_colored_by_flourosopy = st.selectbox("Major Vessels (0-3)", ["Two", "Zero", "One", "Three", "Four"])
+thalassemia = st.selectbox("Thalassemia", ["Reversible Defect", "Fixed Defect", "Normal", "No"])
+
+# ----------- PREDICTION ------------
+
+if st.button("Predict Risk"):
+
+    # Create dictionary
+    input_dict = {
+        "age": age,
+        "resting_blood_pressure": resting_blood_pressure,
+        "cholestoral": cholestoral,
+        "Max_heart_rate": Max_heart_rate,
+        "oldpeak": oldpeak,
+        "sex": sex,
+        "chest_pain_type": chest_pain_type,
+        "fasting_blood_sugar": fasting_blood_sugar,
+        "rest_ecg": rest_ecg,
+        "exercise_induced_angina": exercise_induced_angina,
+        "slope": slope,
+        "vessels_colored_by_flourosopy": vessels_colored_by_flourosopy,
+        "thalassemia": thalassemia
+    }
+
+    # Convert to DataFrame
+    input_df = pd.DataFrame([input_dict])
+
+    # Apply same encoding as training
+    input_df = pd.get_dummies(input_df)
+
+    # Add missing columns
+    for col in feature_columns:
+        if col not in input_df.columns:
+            input_df[col] = 0
+
+    # Ensure same column order
+    input_df = input_df[feature_columns]
+
+    # Scale
+    input_scaled = scaler.transform(input_df)
+
+    # Predict
+    prediction = model.predict(input_scaled)
+    probability = model.predict_proba(input_scaled)[0][1] * 100
+
+    st.subheader("🔍 Prediction Result")
+
+    if prediction[0] == 1:
+        st.error(f"⚠ High Risk of Heart Disease\n\nRisk Probability: {probability:.2f}%")
+    else:
+        st.success(f"✅ Low Risk of Heart Disease\n\nRisk Probability: {probability:.2f}%")
+
+    if probability < 30:
+        st.info("🟢 Risk Level: Low")
+    elif probability < 70:
+        st.warning("🟡 Risk Level: Moderate")
+    else:
+        st.error("🔴 Risk Level: High")
